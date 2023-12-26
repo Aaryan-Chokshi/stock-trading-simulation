@@ -1,0 +1,36 @@
+syntax='proto3';
+
+message DbID {
+    string dbid = 1;
+}
+
+message NotingTransaction {
+    string dbid = 1;
+    string symbol = 2;
+    int32 qty = 3;
+    float price = 4;
+}
+
+message ShareQuery {
+    string dbid = 1;
+    string symbol = 2;
+}
+
+message ShareQtyResponse {
+    int32 qty = 1;
+}
+
+message FundResponse {
+    float fund = 1;
+}
+
+message Message {
+    string message = 1;
+}
+
+service RegisteringTransaction {
+    rpc GetFund(DbID) returns (FundResponse);
+    rpc GetShareQty(ShareQuery) returns (ShareQtyResponse);
+    rpc Buy(NotingTransaction) returns (Message);
+    rpc Sell(NotingTransaction) returns (Message);
+}

@@ -1,0 +1,263 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/smtp"
+	"strings"
+
+	//  "github.com/gorilla/handlers"
+	//	"github.com/gorilla/handlers"
+	//	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
+)
+
+// const (
+// 	host     = "localhost"
+// 	port     = 5432
+// 	user     = "meet"
+// 	password = "meet"
+// 	dbname   = "meet"
+// )
+
+type Response struct {
+	Msg string `json:"msg"`
+}
+
+func sendConfirmationEmail(email string, dbid int) {
+	from := "ma91721@gmail.com"
+	password := "ovne kwar guxm kyto"
+
+	to := []string{email}
+
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	mail := fmt.Sprintf("Paste the below link to verify your email address\nlocalhost:8101/api/register/accept/%d", dbid)
+
+	message := []byte(mail)
+
+	auth := smtp.PlainAuth("", from, password, smtpHost)
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+}
+
+func sendConfirmation(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+
+		fname := r.FormValue("fname")
+		lname := r.FormValue("lname")
+		email := r.FormValue("email")
+		password := r.FormValue("password")
+
+		fmt.Printf("\n%d\n%s\n%s\n%s", len(fname), lname, email, password)
+		connStr := "postgres://postgres:password@localhost/postgres?sslmode=disable"
+		db, err := sql.Open("postgres", connStr)
+
+		if err != nil {
+			panic(err)
+		}
+		err = db.Ping()
+		if err != nil {
+			panic(err)
+		}
+
+		insertQuery := `INSERT INTO "userdata" ("fname", "lname", "email", "password") VALUES ($1, $2, $3, $4)`
+		_, err = db.Exec(insertQuery, fname, lname, email, password)
+		//    fmt.Print("Reached here==========================================================================\n");
+		if err != nil {
+			responseMsg := Response{Msg: "Email address already exists"}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotAcceptable)
+			json.NewEncoder(w).Encode(responseMsg)
+
+		} else {
+			dbQuery := `SELECT dbid FROM "userdata" WHERE email = $1`
+			rows, _ := db.Query(dbQuery, email)
+			// if err != nil {
+			//      fmt.Print("Hehehe lagi gaya======================================");
+			// }
+			for rows.Next() {
+				var dbid int
+				err = rows.Scan(&dbid)
+				if err != nil {
+					panic(err)
+				}
+				sendConfirmationEmail(email, dbid)
+			}
+			responseMsg := Response{Msg: "Please verify your email address"}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(responseMsg)
+		}
+	} else {
+		responseMsg := Response{Msg: "Method not allowed"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(responseMsg)
+	}
+}
+func processConfirmation(w http.ResponseWriter, r *http.Request) {
+	url := strings.Split(r.URL.Path[1:], "/")
+
+	dbid := url[len(url)-1]
+
+	if r.Method == "POST" {
+		connStr := "postgres://postgres:password@localhost/postgres?sslmode=disable"
+		db, err := sql.Open("postgres", connStr)
+
+		if err != nil {
+			panic(err)
+		}
+		err = db.Ping()
+		if err != nil {
+			panic(err)
+		}
+
+		queryString := `select isverified from userdata where dbid=$1`
+		row, _ := db.Query(queryString, dbid)
+		for row.Next() {
+			var isverified string
+			_ = row.Scan(&isverified)
+			if isverified == "false" {
+				verifyString := `UPDATE userdata SET isverified = true WHERE dbid = $1`
+				fmt.Println(isverified)
+				_, _ = db.Exec(verifyString, dbid)
+				responseMsg := Response{Msg: "Email Verified"}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(responseMsg)
+				return
+			} else {
+				responseMsg := Response{Msg: "Email already verified"}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(responseMsg)
+				return
+			}
+		}
+		responseMsg := Response{Msg: "Invalid verification link"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(responseMsg)
+	} else {
+		responseMsg := Response{Msg: "Method not allowed"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(responseMsg)
+	}
+}
+
+func login(w http.ResponseWriter, r *http.Request) {
+	fmt.Println(r.Method)
+
+	if r.Method == "POST" {
+
+		err := r.ParseForm()
+
+		if err != nil {
+			fmt.Println("Error parsing form")
+		}
+		email := r.FormValue("email")
+		pass := r.FormValue("pass")
+		fmt.Printf("\n%s\n%s\n", email, pass)
+
+		// connStr := "postgres://postgres:password@localhost/postgres?sslmode=disable"
+		// db, err := sql.Open("postgres", connStr)
+		// // fmt.Printf("Here: %s\n", password)
+		// //    fmt.Println("Reached or not?");
+
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// err = db.Ping()
+		// if err != nil {
+		// 	panic(err)
+		// }
+
+		// queryString := `SELECT password, isverified, dbid FROM userdata WHERE email = $1;`
+		// row, _ := db.Query(queryString, email)
+
+		// for row.Next() {
+		// 	var password string
+		// 	var isverified string
+		// 	var dbid string
+		// 	_ = row.Scan(&password, &isverified, &dbid)
+		// 	if isverified == "false" {
+		// 		responseMsg := Response{Msg: "Email not verified"}
+		// 		w.Header().Set("Content-Type", "application/json")
+		// 		w.WriteHeader(http.StatusForbidden)
+		// 		json.NewEncoder(w).Encode(responseMsg)
+		// 		return
+		// 	}
+		// 	if pass == password {
+		// 		cookie := http.Cookie{
+		// 			Name:     "dbid",
+		// 			Value:    dbid,
+		// 			Path:     "/",
+		// 			MaxAge:   3600,
+		// 			HttpOnly: true,
+		// 			Secure:   true,
+		// 			SameSite: http.SameSiteLaxMode,
+		// 		}
+		// 		http.SetCookie(w, &cookie)
+		// 		responseMsg := Response{Msg: "Login Successful"}
+		// 		w.Header().Set("Content-Type", "application/json")
+		// 		w.WriteHeader(http.StatusOK)
+		// 		json.NewEncoder(w).Encode(responseMsg)
+		// 		return
+
+		// 	} else {
+		// 		responseMsg := Response{Msg: "Incorrect Password"}
+		// 		w.Header().Set("Content-Type", "application/json")
+		// 		w.WriteHeader(http.StatusUnauthorized)
+		// 		json.NewEncoder(w).Encode(responseMsg)
+		// 		return
+		// 	}
+		// }
+		responseMsg := Response{Msg: "Email id not found"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(responseMsg)
+		return
+	} else {
+		responseMsg := Response{Msg: "Method not allowed"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(responseMsg)
+		return
+	}
+}
+
+func main() {
+
+	http.HandleFunc("/api/register/request", sendConfirmation)
+	http.HandleFunc("/api/register/accept/", processConfirmation)
+	http.HandleFunc("/api/login", login)
+
+	err := http.ListenAndServe(":8101", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	/*
+		  router := mux.NewRouter()
+		  router.HandleFunc("/api/register/request", sendConfirmation);
+		  router.HandleFunc("/api/register/accept/", processConfirmation);
+		  router.HandleFunc("/api/login", login).Methods("POST")
+
+		  http.ListenAndServe(":8101",
+		    handlers.CORS(
+					handlers.AllowedOrigins([]string{"*"}),
+					handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+					handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}),
+		    )(router))
+	*/
+
+}

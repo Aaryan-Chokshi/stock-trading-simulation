@@ -1,0 +1,1 @@
+python3 -m grpc_tools.protoc -I./protos --python_out=./registry/ --pyi_out=./registry/ --grpc_python_out=./registry/ ./protos/stocks.proto
